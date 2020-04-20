@@ -10,7 +10,7 @@
 #include "ofxOceanodeMidiBinding.h"
 #include "imgui.h"
 
-ofxOceanodeMidiController::ofxOceanodeMidiController(shared_ptr<ofxOceanodePresetsController> _presetsController, shared_ptr<ofxOceanodeContainer> _container) : ofxOceanodeBaseController(_container, "MIDI"){
+ofxOceanodeMidiController::ofxOceanodeMidiController(shared_ptr<ofxOceanodePresetsController> _presetsController, shared_ptr<ofxOceanodeContainer> _container) : container(_container), ofxOceanodeBaseController("MIDI"){
     midiLearn = false;
     midiDevices = container->getMidiDevices();
     container->setIsListeningMidi(midiLearn);
@@ -30,7 +30,6 @@ ofxOceanodeMidiController::ofxOceanodeMidiController(shared_ptr<ofxOceanodePrese
 }
 
 void ofxOceanodeMidiController::draw(){
-    ImGui::Begin(controllerName.c_str());
     if(ImGui::Checkbox("Midi Learn", &midiLearn)){
         container->setIsListeningMidi(midiLearn);
     }
@@ -61,7 +60,6 @@ void ofxOceanodeMidiController::draw(){
         }
     }
     ImGui::EndChild();
-    ImGui::End();
 }
 
 void ofxOceanodeMidiController::createGuiForBinding(shared_ptr<ofxOceanodeAbstractMidiBinding> binding){

@@ -70,12 +70,9 @@ private:
     bool midiLearn;
     ofEventListeners listeners;
     vector<string> midiDevices;
-
-    //midiBindingControls
-//    map<string, ofxDatGuiFolder*> folders;
-    
     
     ofxOceanodePresetsMidiControl presetsControl;
+    shared_ptr<ofxOceanodeContainer> container;
 };
 
 #endif /* ofxOceanodeMidiController_h */
