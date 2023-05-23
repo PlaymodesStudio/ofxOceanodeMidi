@@ -11,6 +11,7 @@
 #include "ofxOceanodeBaseController.h"
 #include "ofxOceanodePresetsController.h"
 #include "ofxMidi.h"
+#include "ofParameter.h"
 
 class ofxOceanodeAbstractMidiBinding;
 
@@ -38,25 +39,25 @@ public:
     
     ofParameter<int> &getChannel(){return channel;};
     
-    void setMidiDevice(string device){midiDevice = device;};
-    void setType(string _type){type = _type;};
-    void setPresetsController(shared_ptr<ofxOceanodePresetsController> _presetsController){presetsController = _presetsController;};
+    void setMidiDevice(std::string device){midiDevice = device;};
+    void setType(std::string _type){type = _type;};
+    void setPresetsController(std::shared_ptr<ofxOceanodePresetsController> _presetsController){presetsController = _presetsController;};
     
 private:
     ofParameter<int> channel;
-    string type;
-    string midiDevice;
-    shared_ptr<ofxOceanodePresetsController> presetsController;
+    std::string type;
+    std::string midiDevice;
+    std::shared_ptr<ofxOceanodePresetsController> presetsController;
 };
 
 class ofxOceanodeMidiController : public ofxOceanodeBaseController{
 public:
-    ofxOceanodeMidiController(shared_ptr<ofxOceanodePresetsController> presetsController, shared_ptr<ofxOceanodeContainer> _container);
+    ofxOceanodeMidiController(std::shared_ptr<ofxOceanodePresetsController> presetsController, std::shared_ptr<ofxOceanodeContainer> _container);
     ~ofxOceanodeMidiController(){};
     
 //    void midiLearnPressed(ofxDatGuiToggleEvent e);
 //
-    void createGuiForBinding(shared_ptr<ofxOceanodeAbstractMidiBinding> midiBinding);
+    void createGuiForBinding(std::shared_ptr<ofxOceanodeAbstractMidiBinding> midiBinding);
     void removeParameterBinding(ofxOceanodeAbstractMidiBinding &midiBinding);
 //
 //    void onGuiDropdownEvent(ofxDatGuiDropdownEvent e);
@@ -69,10 +70,10 @@ public:
 private:
     bool midiLearn;
     ofEventListeners listeners;
-    vector<string> midiDevices;
+    std::vector<std::string> midiDevices;
     
     ofxOceanodePresetsMidiControl presetsControl;
-    shared_ptr<ofxOceanodeContainer> container;
+    std::shared_ptr<ofxOceanodeContainer> container;
 };
 
 #endif /* ofxOceanodeMidiController_h */

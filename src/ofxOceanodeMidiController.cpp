@@ -8,6 +8,7 @@
 #include "ofxOceanodeMidiController.h"
 #include "ofxOceanodeContainer.h"
 #include "ofxOceanodeMidiBinding.h"
+#include "ofxOceanodeNodeMacro.h"
 #include "imgui.h"
 
 ofxOceanodeMidiController::ofxOceanodeMidiController(shared_ptr<ofxOceanodePresetsController> _presetsController, shared_ptr<ofxOceanodeContainer> _container) : container(_container), ofxOceanodeBaseController("MIDI"){
@@ -53,9 +54,30 @@ void ofxOceanodeMidiController::draw(){
         }
     }
     if (ImGui::CollapsingHeader("Current Preset")){
-        for(auto &parameterBindings : container->getMidiBindings()){
-            for(auto &binding : parameterBindings.second){
-                createGuiForBinding(binding);
+        if (ImGui::TreeNode("Canvas")){
+            for(auto &parameterBindings : container->getMidiBindings()){
+                if (ImGui::TreeNode(parameterBindings.first.c_str())){
+                    for(auto &binding : parameterBindings.second){
+                        createGuiForBinding(binding);
+                    }
+                    ImGui::TreePop();
+                }
+            }
+            ImGui::TreePop();
+        }
+        for(auto &node : container->getAllModules()){
+            if (ofxOceanodeNodeMacro* m = dynamic_cast<ofxOceanodeNodeMacro*>(&node->getNodeModel())) {
+                if (ImGui::TreeNode(m->getParameterGroup().getName().c_str())){
+                    for(auto &parameterBindings : m->getContainer()->getMidiBindings()){
+                        if (ImGui::TreeNode(parameterBindings.first.c_str())){
+                            for(auto &binding : parameterBindings.second){
+                                createGuiForBinding(binding);
+                            }
+                            ImGui::TreePop();
+                        }
+                    }
+                    ImGui::TreePop();
+                }
             }
         }
     }
@@ -73,6 +95,9 @@ void ofxOceanodeMidiController::createGuiForBinding(shared_ptr<ofxOceanodeAbstra
 //            //TODO: Change controller type
 //        }
         ImGui::Text("%s", binding->getMessageType()->c_str());
+        if(ImGui::SliderInt("LSB", (int *)&binding->getLSB().get(), -1, 127)){
+            binding->getLSB() = binding->getLSB();
+        }
         if(ImGui::SliderInt("Channel", (int *)&binding->getChannel().get(), 0, 16)){
             binding->getChannel() = binding->getChannel();
         }
@@ -80,7 +105,7 @@ void ofxOceanodeMidiController::createGuiForBinding(shared_ptr<ofxOceanodeAbstra
         if(ImGui::SliderInt("Control", (int *)&binding->getControl().get(), 0, 127)){
             binding->getControl() = binding->getControl();
         }
-        if(ImGui::SliderInt("Midi Value", (int *)&binding->getValue().get(), 0, 127)){
+        if(ImGui::SliderInt("Midi Value", (int *)&binding->getValue().get(), 0, binding->getLSB() ? 16383 : 127)){
             //TODO: Implement that can change parameter with this (if controller is not present;
             binding->getValue() = binding->getValue();
         }
@@ -124,6 +149,9 @@ void ofxOceanodeMidiController::createGuiForBinding(shared_ptr<ofxOceanodeAbstra
             auto midiBindingCasted = dynamic_pointer_cast<ofxOceanodeMidiBinding<bool>>(binding);
             if(ImGui::Checkbox("Toggle", (bool *)&midiBindingCasted->getToggleParameter().get())){
                 midiBindingCasted->getToggleParameter() = midiBindingCasted->getToggleParameter();
+            }
+            if(ImGui::Checkbox("FilterOff", (bool *)&midiBindingCasted->getFilterOffParameter().get())){
+                midiBindingCasted->getFilterOffParameter() = midiBindingCasted->getFilterOffParameter();
             }
         }
         else if(binding->type() == typeid(ofxOceanodeMidiBinding<void>).name()){

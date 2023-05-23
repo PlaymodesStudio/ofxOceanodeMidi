@@ -22,6 +22,7 @@ public:
         messageType.set("Message Type", "Not Assigned");
         channel.set("Channel", -1, 1, 16);
         control.set("Control", -1, 0, 127);
+        lsb.set("LSB", -1, 0, 127);
         value.set("Value", -1, 0, 127);
         portName = "";
         modifiyingParameter = false;
@@ -56,6 +57,7 @@ public:
         json["Channel"] = channel.get();
         json["Control"] = control.get();
         json["Type"] = messageType.get();
+        json["LSB"] = lsb.get();
     }
     
     virtual void loadPreset(ofJson &json){
@@ -71,6 +73,10 @@ public:
         if(messageType.get() == ofxMidiMessage::getStatusString(MIDI_CONTROL_CHANGE)) status = MIDI_CONTROL_CHANGE;
         else if(messageType.get() == ofxMidiMessage::getStatusString(MIDI_NOTE_ON)) status = MIDI_NOTE_ON;
         else ofLog() << "Type Error";
+        
+        if(json.count("LSB") == 1){
+            lsb = json["LSB"];
+        }
     }
     
     string type() const{
@@ -85,11 +91,12 @@ public:
     ofParameter<int> &getChannel(){return channel;};
     ofParameter<int> &getControl(){return control;};
     ofParameter<int> &getValue(){return value;};
+    ofParameter<int> &getLSB(){return lsb;};
     //TODO: ADD Midi device?
     
     string getPortName(){return portName;};
     
-    virtual ofxMidiMessage& sendMidiMessage(){};
+    virtual ofxMidiMessage& sendMidiMessage(){ofxMidiMessage m; return m;};
     virtual void bindParameter(){};
     
     ofEvent<string> unregisterUnusedMidiIns;
@@ -106,6 +113,7 @@ protected:
     ofParameter<int> channel;
     ofParameter<int> control;
     ofParameter<int> value;
+    ofParameter<int> lsb;
     
     string name;
     ofxMidiMessage firstMidiMessage;
@@ -158,6 +166,9 @@ public:
     void update(){
         mutex.lock();
         bool validMessage = false;
+        int msb_val = -1;
+        int lsb_val = -1;
+        bool is14bit = lsb != -1;
         for(int i = lastsMidiMessage.size()-1; i >= 0 && !validMessage ; i--){
             ofxMidiMessage &message = lastsMidiMessage[i];
             if(message.status == MIDI_NOTE_OFF){
@@ -170,8 +181,23 @@ public:
                     case MIDI_CONTROL_CHANGE:
                     {
                         if(message.control == control){
-                            value = message.value;
-                            validMessage = true;
+                            if(!is14bit){
+                                value = message.value;
+                                validMessage = true;
+                            }
+                            else{
+                                msb_val = message.value;
+                                if(lsb_val != -1){
+                                    value = (msb_val * 128) + lsb_val;
+                                    validMessage = true;
+                                }
+                            }
+                        }else if(message.control == lsb){
+                            lsb_val = message.value;
+                            if(msb_val != -1){
+                                value = (msb_val * 128) + lsb_val;
+                                validMessage = true;
+                            }
                         }
                         break;
                     }
@@ -191,7 +217,7 @@ public:
                 }
                 if(validMessage){
                     modifiyingParameter = true;
-                    parameter.set(ofMap(value, 1, 127, min, max, true));
+                    parameter.set(ofMap(value, 0, is14bit ? 16383 : 127, min, max, true));
                     modifiyingParameter = false;
                 }
             }
@@ -201,8 +227,14 @@ public:
     };
     void bindParameter(){
         listener = parameter.newListener([this](T &f){
+            bool is14bit = lsb != -1;
             if(!modifiyingParameter){
-                value = ofMap(f, min, max, 1, 127, true);
+                if(is14bit){
+                    value = ofMap(f, min, max, 0, 16383, true);
+                    value = value >> 7 & 0x007f;
+                }else{
+                    value = ofMap(f, min, max, 0, 127, true);
+                }
                 ofxMidiMessage message;
                 message.status = status;
                 message.channel = channel;
@@ -219,6 +251,16 @@ public:
                         ofLog() << "Midi Type " << ofxMidiMessage::getStatusString(message.status) << " not supported for parameter of type " << typeid(T).name();
                 }
                 midiMessageSender.notify(this, message);
+                if(is14bit){
+                    value = ofMap(f, min, max, 0, 16383, true);
+                    value = value & 0x007f;
+                    ofxMidiMessage message;
+                    message.status = status;
+                    message.channel = channel;
+                    message.control = lsb;
+                    message.value = value;
+                    midiMessageSender.notify(this, message);
+                }
             }
         });
     };
@@ -265,6 +307,9 @@ public:
     void update(){
         mutex.lock();
         bool validMessage = false;
+        int msb_val = -1;
+        int lsb_val = -1;
+        bool is14bit = lsb != -1;
         for(int i = lastsMidiMessage.size()-1; i >= 0 && !validMessage ; i--){
             ofxMidiMessage &message = lastsMidiMessage[i];
             
@@ -278,8 +323,23 @@ public:
                     case MIDI_CONTROL_CHANGE:
                     {
                         if(message.control == control){
-                            value = message.value;
-                            validMessage = true;
+                            if(!is14bit){
+                                value = message.value;
+                                validMessage = true;
+                            }
+                            else{
+                                msb_val = message.value;
+                                if(lsb_val != -1){
+                                    value = (msb_val * 128) + lsb_val;
+                                    validMessage = true;
+                                }
+                            }
+                        }else if(message.control == lsb){
+                            lsb_val = message.value;
+                            if(msb_val != -1){
+                                value = (msb_val * 128) + lsb_val;
+                                validMessage = true;
+                            }
                         }
                         break;
                     }
@@ -298,7 +358,7 @@ public:
                 }
                 if(validMessage){
                     modifiyingParameter = true;
-                    parameter.set(vector<T>(1, ofMap(value, 1, 127, min, max, true)));
+                    parameter.set(vector<T>(1, ofMap(value, 0, is14bit ? 16383 : 127, min, max, true)));
                     modifiyingParameter = false;
                 }
             }
@@ -309,8 +369,14 @@ public:
     
     void bindParameter(){
         listener = parameter.newListener([this](vector<T> &vf){
+            bool is14bit = lsb != -1;
             if(!modifiyingParameter && vf.size() == 1){
-                value = ofMap(vf[0], min, max, 1, 127, true);
+                if(is14bit){
+                    value = ofMap(vf[0], min, max, 0, 16383, true);
+                    value = value >> 7 & 0x007f;
+                }else{
+                    value = ofMap(vf[0], min, max, 0, 127, true);
+                }
                 ofxMidiMessage message;
                 message.status = status;
                 message.channel = channel;
@@ -327,6 +393,16 @@ public:
                         ofLog() << "Midi Type " << ofxMidiMessage::getStatusString(message.status) << " not supported for parameter of type " << typeid(vector<T>).name();
                 }
                 midiMessageSender.notify(this, message);
+                if(is14bit){
+                    value = ofMap(vf[0], min, max, 0, 16383, true);
+                    value = value & 0x007f;
+                    ofxMidiMessage message;
+                    message.status = status;
+                    message.channel = channel;
+                    message.control = lsb;
+                    message.value = value;
+                    midiMessageSender.notify(this, message);
+                }
             }
         });
     };
@@ -346,6 +422,7 @@ public:
     ofxOceanodeMidiBinding(ofParameter<bool>& _parameter, int _id) : parameter(_parameter), ofxOceanodeAbstractMidiBinding(){
         name = parameter.getGroupHierarchyNames()[0] + "-|-" + parameter.getEscapedName() + " " + ofToString(_id);
         toggle.set("Toggle", false);
+        filterOff.set("FilterOff", false);
     }
     
     ~ofxOceanodeMidiBinding(){};
@@ -353,11 +430,17 @@ public:
     void savePreset(ofJson &json){
         ofxOceanodeAbstractMidiBinding::savePreset(json);
         json["Toggle"] = toggle.get();
+        json["FilterOff"] = filterOff.get();
     }
     
     void loadPreset(ofJson &json){
         ofxOceanodeAbstractMidiBinding::loadPreset(json);
         toggle.set(json["Toggle"]);
+        if(json.count("FilterOff") == 1){
+            filterOff.set(json["FilterOff"]);
+        }else{
+            filterOff = false;
+        }
     }
     
     void update(){
@@ -401,7 +484,9 @@ public:
                             parameter.set(!parameter.get());
                         }
                     }else{
-                        parameter.set(value > 63 ? true : false);
+                        if(!(value == 0 && filterOff)){
+                            parameter.set(value > 63 ? true : false);
+                        }
                     }
                     modifiyingParameter = false;
                 }
@@ -430,15 +515,21 @@ public:
                         ofLog() << "Midi Type " << ofxMidiMessage::getStatusString(message.status) << " not supported for parameter of type Bool";
                 }
                 midiMessageSender.notify(this, message);
+//                if(value == 0 && status == MIDI_NOTE_ON){
+//                    message.status = MIDI_NOTE_OFF;
+//                    midiMessageSender.notify(this, message);
+//                }
             }
         });
     };
     
     ofParameter<bool> &getToggleParameter(){return toggle;};
+    ofParameter<bool> &getFilterOffParameter(){return filterOff;};
     
 private:
     ofParameter<bool>& parameter;
     ofParameter<bool> toggle;
+    ofParameter<bool> filterOff;
 };
 
 template<>
