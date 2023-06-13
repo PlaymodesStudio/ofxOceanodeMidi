@@ -118,16 +118,19 @@ public:
             }
 
             for(int i = 0; i < vf.size(); i++){
-                if(vf[i] != noteGroupStore[i] || gate[i] != gateGroupStore[i]){
-                    if(gate[i] != 0){
-                        midiOut.sendNoteOn(midiChannel, static_cast<int>(vf[i]), gate[i]*127);
-                        activeNotes.insert(static_cast<int>(vf[i]));
-                    }else{
-                        midiOut.sendNoteOff(midiChannel, static_cast<int>(vf[i]));
-                        activeNotes.erase(static_cast<int>(vf[i]));
+                if(i < gate.size() && i < noteGroupStore.size() && i < gateGroupStore.size()){
+                    if(vf[i] != noteGroupStore[i] || gate[i] != gateGroupStore[i]){
+                        if(gate[i] != 0){
+                            midiOut.sendNoteOn(midiChannel, static_cast<int>(vf[i]), gate[i]*127);
+                            activeNotes.insert(static_cast<int>(vf[i]));
+                        }else{
+                            midiOut.sendNoteOff(midiChannel, static_cast<int>(vf[i]));
+                            activeNotes.erase(static_cast<int>(vf[i]));
+                        }
                     }
                 }
             }
+
 
             for(auto it = activeNotes.begin(); it != activeNotes.end();){
                 if(std::find(vf.begin(), vf.end(), *it) == vf.end()){
