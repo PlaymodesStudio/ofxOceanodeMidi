@@ -16,6 +16,8 @@ namespace ofxOceanodeMidi{
 static void registerModels(ofxOceanode &o){
     o.registerModel<noteOut>("MIDI");
     o.registerModel<ctlOut>("MIDI");
+    o.registerModel<controlChange>("MIDI");
+    o.registerModel<programChange>("MIDI");
     o.registerModel<noteGate>("MIDI");
     o.registerModel<midiGateIn>("MIDI");
     o.registerModel<vectorHold>("Helpers");

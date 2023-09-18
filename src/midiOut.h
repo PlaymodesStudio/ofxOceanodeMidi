@@ -90,14 +90,56 @@ private:
     vector<float> ccStore;
 };
 
-// NoteGate class
-class noteGate : public ofxOceanodeNodeModel{
+class controlChange : public ofxOceanodeNodeModel {
+public:
+    controlChange() : ofxOceanodeNodeModel("Control Change") {}
+
+    void setup() {
+        addParameterDropdown(midiPort, "Port", 0, midiOut.getOutPortList());
+        addParameter(midiChannel.set("Ch", {1}, {1}, {16}));
+        addParameter(ccNum.set("CC num", {0}, {0}, {127}));
+        addParameter(ccVal.set("CC val", {0}, {0}, {127}));
+
+        listeners.push(midiPort.newListener([this](int &device){
+            midiOut.openPort(device);
+        }));
+
+        auto sendCC = [this]() {
+            vector<int> ccNumbers = ccNum.get();
+            vector<float> values = ccVal.get();
+            vector<int> channels = midiChannel.get();
+
+            // Ensure the sizes are consistent
+            int minSize = std::min(std::min(ccNumbers.size(), values.size()), channels.size());
+
+            for(int i = 0; i < minSize; i++){
+                midiOut.sendControlChange(channels[i], ccNumbers[i], static_cast<int>(values[i]));
+            }
+        };
+
+        listeners.push(ccNum.newListener([sendCC](vector<int> &){ sendCC(); }));
+        listeners.push(ccVal.newListener([sendCC](vector<float> &){ sendCC(); }));
+    }
+
+private:
+    ofParameter<int> midiPort;
+    ofParameter<vector<int>> midiChannel;
+    ofParameter<vector<int>> ccNum;
+    ofParameter<vector<float>> ccVal;
+
+    ofEventListeners listeners;
+
+    ofxMidiOut midiOut;
+};
+
+
+class noteGate : public ofxOceanodeNodeModel {
 public:
     noteGate() : ofxOceanodeNodeModel("Note Gate") {}
 
     void setup() {
         addParameterDropdown(midiPort, "Port", 0, midiOut.getOutPortList());
-        addParameter(midiChannel.set("Ch", 1, 1, 16));
+        addParameter(midiChannel.set("Ch", {1}, {1}, {16}));
         addParameter(noteGroup.set("Note", {0}, {-FLT_MAX}, {FLT_MAX}));
         addParameter(gateGroup.set("Gate", {0}, {0}, {1}));
 
@@ -107,34 +149,38 @@ public:
 
         listeners.push(noteGroup.newListener([this](vector<float> &vf){
             vector<float> gate = gateGroup.get();
+            vector<int> channels = midiChannel.get();
 
             if(vf.size() != noteGroupStore.size() || gate.size() != gateGroupStore.size()){
                 for(auto it = activeNotes.begin(); it != activeNotes.end();){
-                    midiOut.sendNoteOff(midiChannel, *it);
+                    midiOut.sendNoteOff(it->second, it->first);
                     it = activeNotes.erase(it);
                 }
                 noteGroupStore.resize(vf.size(), 0.0);
                 gateGroupStore.resize(gate.size(), 0.0);
+                channelsStore.resize(channels.size(), 0);
             }
 
             for(int i = 0; i < vf.size(); i++){
-                if(i < gate.size() && i < noteGroupStore.size() && i < gateGroupStore.size()){
-                    if(vf[i] != noteGroupStore[i] || gate[i] != gateGroupStore[i]){
+                if(i < gate.size() && i < noteGroupStore.size() && i < gateGroupStore.size() && i < channels.size()){
+                    bool noteChanged = vf[i] != noteGroupStore[i];
+                    bool gateChanged = gate[i] != gateGroupStore[i] && gate[i] != 0;
+
+                    if(gateChanged || noteChanged){
+                        if(activeNotes.find(static_cast<int>(noteGroupStore[i])) != activeNotes.end()) {
+                            midiOut.sendNoteOff(channels[i], static_cast<int>(noteGroupStore[i]));
+                        }
                         if(gate[i] != 0){
-                            midiOut.sendNoteOn(midiChannel, static_cast<int>(vf[i]), gate[i]*127);
-                            activeNotes.insert(static_cast<int>(vf[i]));
-                        }else{
-                            midiOut.sendNoteOff(midiChannel, static_cast<int>(vf[i]));
-                            activeNotes.erase(static_cast<int>(vf[i]));
+                            midiOut.sendNoteOn(channels[i], static_cast<int>(vf[i]), gate[i]*127);
+                            activeNotes[static_cast<int>(vf[i])] = channels[i];
                         }
                     }
                 }
             }
 
-
             for(auto it = activeNotes.begin(); it != activeNotes.end();){
-                if(std::find(vf.begin(), vf.end(), *it) == vf.end()){
-                    midiOut.sendNoteOff(midiChannel, *it);
+                if(std::find(vf.begin(), vf.end(), it->first) == vf.end()){
+                    midiOut.sendNoteOff(it->second, it->first);
                     it = activeNotes.erase(it);
                 }else{
                     ++it;
@@ -143,12 +189,13 @@ public:
 
             noteGroupStore = vf;
             gateGroupStore = gate;
+            channelsStore = channels;
         }));
     }
 
 private:
     ofParameter<int> midiPort;
-    ofParameter<int> midiChannel;
+    ofParameter<vector<int>> midiChannel;
     ofParameter<vector<float>> noteGroup;
     ofParameter<vector<float>> gateGroup;
 
@@ -157,7 +204,43 @@ private:
     ofxMidiOut midiOut;
     vector<float> noteGroupStore;
     vector<float> gateGroupStore;
-    std::set<int> activeNotes;
+    vector<int> channelsStore;
+    std::map<int, int> activeNotes;
+};
+
+class programChange : public ofxOceanodeNodeModel {
+public:
+    programChange() : ofxOceanodeNodeModel("Program Change") {}
+
+    void setup() {
+        addParameterDropdown(midiPort, "Port", 0, midiOut.getOutPortList());
+        addParameter(midiChannel.set("Ch", {1}, {1}, {16}));
+        addParameter(prgNum.set("Prg Num", {0}, {0}, {127}));
+
+        listeners.push(midiPort.newListener([this](int &device){
+            midiOut.openPort(device);
+        }));
+
+        listeners.push(prgNum.newListener([this](vector<int> &pn){
+            vector<int> channels = midiChannel.get();
+
+            // Ensure the sizes are consistent
+            int minSize = std::min(pn.size(), channels.size());
+
+            for(int i = 0; i < minSize; i++){
+                midiOut.sendProgramChange(channels[i], pn[i]);
+            }
+        }));
+    }
+
+private:
+    ofParameter<int> midiPort;
+    ofParameter<vector<int>> midiChannel;
+    ofParameter<vector<int>> prgNum;
+
+    ofEventListeners listeners;
+
+    ofxMidiOut midiOut;
 };
 
 #endif /* midiOut_h */
