@@ -138,59 +138,80 @@ public:
     noteGate() : ofxOceanodeNodeModel("Note Gate") {}
 
     void setup() {
-        addParameterDropdown(midiPort, "Port", 0, midiOut.getOutPortList());
-        addParameter(midiChannel.set("Ch", {1}, {1}, {16}));
-        addParameter(noteGroup.set("Note", {0}, {-FLT_MAX}, {FLT_MAX}));
-        addParameter(gateGroup.set("Gate", {0}, {0}, {1}));
+            addParameterDropdown(midiPort, "Port", 0, midiOut.getOutPortList());
+            addParameter(midiChannel.set("Ch", {1}, {1}, {16}));
+            addParameter(noteGroup.set("Note", {0}, {-FLT_MAX}, {FLT_MAX}));
+            addParameter(gateGroup.set("Gate", {0}, {0}, {1}));
+            addParameter(noteTrig.set("Note Trig", false));
+            addParameter(panicTrigger.set("Panic", false));
 
-        listeners.push(midiPort.newListener([this](int &device){
-            midiOut.openPort(device);
-        }));
+            listeners.push(midiPort.newListener([this](int &device){
+                midiOut.openPort(device);
+            }));
 
-        listeners.push(noteGroup.newListener([this](vector<float> &vf){
-            vector<float> gate = gateGroup.get();
-            vector<int> channels = midiChannel.get();
-
-            if(vf.size() != noteGroupStore.size() || gate.size() != gateGroupStore.size()){
-                for(auto it = activeNotes.begin(); it != activeNotes.end();){
-                    midiOut.sendNoteOff(it->second, it->first);
-                    it = activeNotes.erase(it);
+            listeners.push(noteGroup.newListener([this](vector<float> &vf){
+                if(noteTrig) {
+                    updateMidiMessages();
                 }
-                noteGroupStore.resize(vf.size(), 0.0);
-                gateGroupStore.resize(gate.size(), 0.0);
-                channelsStore.resize(channels.size(), 0);
+            }));
+
+            listeners.push(gateGroup.newListener([this](vector<float> &vf){
+                updateMidiMessages();
+            }));
+
+            listeners.push(panicTrigger.newListener([this](bool &val){
+                if(val) {
+                    sendAllNoteOff();
+                    panicTrigger = false;  // Reset the trigger after sending
+                }
+            }));
+        }
+
+    void updateMidiMessages() {
+        vector<float> vf = noteGroup.get();
+        vector<float> gate = gateGroup.get();
+        vector<int> channels = midiChannel.get();
+
+        if(vf.size() != noteGroupStore.size() || gate.size() != gateGroupStore.size()){
+            for(auto it = activeNotes.begin(); it != activeNotes.end();){
+                midiOut.sendNoteOff(it->second, it->first);
+                it = activeNotes.erase(it);
             }
+            noteGroupStore.resize(vf.size(), 0.0);
+            gateGroupStore.resize(gate.size(), 0.0);
+            channelsStore.resize(channels.size(), 0);
+        }
 
-            for(int i = 0; i < vf.size(); i++){
-                if(i < gate.size() && i < noteGroupStore.size() && i < gateGroupStore.size() && i < channels.size()){
-                    bool noteChanged = vf[i] != noteGroupStore[i];
-                    bool gateChanged = gate[i] != gateGroupStore[i] && gate[i] != 0;
+        for(int i = 0; i < vf.size(); i++){
+            if(i < gate.size() && i < noteGroupStore.size() && i < gateGroupStore.size() && i < channels.size()){
+                bool noteChanged = noteTrig && (vf[i] != noteGroupStore[i]);
+                bool gateChanged = gate[i] != gateGroupStore[i];
 
-                    if(gateChanged || noteChanged){
-                        if(activeNotes.find(static_cast<int>(noteGroupStore[i])) != activeNotes.end()) {
-                            midiOut.sendNoteOff(channels[i], static_cast<int>(noteGroupStore[i]));
-                        }
-                        if(gate[i] != 0){
-                            midiOut.sendNoteOn(channels[i], static_cast<int>(vf[i]), gate[i]*127);
-                            activeNotes[static_cast<int>(vf[i])] = channels[i];
-                        }
+                if(gateChanged || noteChanged){
+                    if(activeNotes.find(static_cast<int>(noteGroupStore[i])) != activeNotes.end() || gate[i] == 0) {
+                        midiOut.sendNoteOff(channels[i], static_cast<int>(noteGroupStore[i]));
+                        activeNotes.erase(static_cast<int>(noteGroupStore[i]));
+                    }
+                    if(gate[i] != 0){
+                        midiOut.sendNoteOn(channels[i], static_cast<int>(vf[i]), gate[i]*127);
+                        activeNotes[static_cast<int>(vf[i])] = channels[i];
                     }
                 }
             }
+        }
 
-            for(auto it = activeNotes.begin(); it != activeNotes.end();){
-                if(std::find(vf.begin(), vf.end(), it->first) == vf.end()){
-                    midiOut.sendNoteOff(it->second, it->first);
-                    it = activeNotes.erase(it);
-                }else{
-                    ++it;
-                }
+        for(auto it = activeNotes.begin(); it != activeNotes.end();){
+            if(std::find(vf.begin(), vf.end(), it->first) == vf.end()){
+                midiOut.sendNoteOff(it->second, it->first);
+                it = activeNotes.erase(it);
+            }else{
+                ++it;
             }
+        }
 
-            noteGroupStore = vf;
-            gateGroupStore = gate;
-            channelsStore = channels;
-        }));
+        noteGroupStore = vf;
+        gateGroupStore = gate;
+        channelsStore = channels;
     }
 
 private:
@@ -198,6 +219,8 @@ private:
     ofParameter<vector<int>> midiChannel;
     ofParameter<vector<float>> noteGroup;
     ofParameter<vector<float>> gateGroup;
+    ofParameter<bool> noteTrig;
+    ofParameter<bool> panicTrigger;  // The panic trigger parameter
 
     ofEventListeners listeners;
 
@@ -206,7 +229,17 @@ private:
     vector<float> gateGroupStore;
     vector<int> channelsStore;
     std::map<int, int> activeNotes;
+
+    void sendAllNoteOff() {
+        for (int channel = 1; channel <= 16; ++channel) {
+            for (int note = 0; note <= 127; ++note) {
+                midiOut.sendNoteOff(channel, note, 0);  // Sending note off for every note on every channel
+            }
+        }
+    }
 };
+
+
 
 class programChange : public ofxOceanodeNodeModel {
 public:
@@ -242,5 +275,8 @@ private:
 
     ofxMidiOut midiOut;
 };
+
+
+
 
 #endif /* midiOut_h */
