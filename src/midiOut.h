@@ -173,10 +173,6 @@ public:
         vector<int> channels = midiChannel.get();
 
         if(vf.size() != noteGroupStore.size() || gate.size() != gateGroupStore.size()){
-            for(auto it = activeNotes.begin(); it != activeNotes.end();){
-                midiOut.sendNoteOff(it->second, it->first);
-                it = activeNotes.erase(it);
-            }
             noteGroupStore.resize(vf.size(), 0.0);
             gateGroupStore.resize(gate.size(), 0.0);
             channelsStore.resize(channels.size(), 0);
@@ -187,25 +183,31 @@ public:
                 bool noteChanged = noteTrig && (vf[i] != noteGroupStore[i]);
                 bool gateChanged = gate[i] != gateGroupStore[i];
 
-                if(gateChanged || noteChanged){
-                    if(activeNotes.find(static_cast<int>(noteGroupStore[i])) != activeNotes.end() || gate[i] == 0) {
-                        midiOut.sendNoteOff(channels[i], static_cast<int>(noteGroupStore[i]));
-                        activeNotes.erase(static_cast<int>(noteGroupStore[i]));
-                    }
-                    if(gate[i] != 0){
-                        midiOut.sendNoteOn(channels[i], static_cast<int>(vf[i]), gate[i]*127);
-                        activeNotes[static_cast<int>(vf[i])] = channels[i];
+                // If the note has changed or gate is turned off, send a note-off for the previously active note on this channel
+                if(noteChanged || (gateChanged && gate[i] == 0)) {
+                    if (activeNotes.find(i) != activeNotes.end()) {
+                        midiOut.sendNoteOff(channels[i], activeNotes[i], 0);
+                        activeNotes.erase(i);
                     }
                 }
-            }
-        }
+                
+                // If noteTrig=false, we only want to act upon gate changes, not note changes.
+                if(!noteTrig){
+                    noteChanged = false;
+                }
 
-        for(auto it = activeNotes.begin(); it != activeNotes.end();){
-            if(std::find(vf.begin(), vf.end(), it->first) == vf.end()){
-                midiOut.sendNoteOff(it->second, it->first);
-                it = activeNotes.erase(it);
-            }else{
-                ++it;
+                // Handle gate messages based on note or gate changes.
+                if(gateChanged || noteChanged){
+                    if(gate[i] != 0){
+                        // If the previous gate value was not zero, send a note off for the current note
+                        if(gateGroupStore[i] != 0 && activeNotes.find(i) != activeNotes.end()){
+                            midiOut.sendNoteOff(channels[i], activeNotes[i],0);
+                        }
+
+                        midiOut.sendNoteOn(channels[i], static_cast<int>(vf[i]), gate[i]*127);
+                        activeNotes[i] = static_cast<int>(vf[i]);
+                    }
+                }
             }
         }
 
@@ -214,30 +216,34 @@ public:
         channelsStore = channels;
     }
 
-private:
-    ofParameter<int> midiPort;
-    ofParameter<vector<int>> midiChannel;
-    ofParameter<vector<float>> noteGroup;
-    ofParameter<vector<float>> gateGroup;
-    ofParameter<bool> noteTrig;
-    ofParameter<bool> panicTrigger;  // The panic trigger parameter
 
-    ofEventListeners listeners;
 
-    ofxMidiOut midiOut;
-    vector<float> noteGroupStore;
-    vector<float> gateGroupStore;
-    vector<int> channelsStore;
+    private:
+        ofParameter<int> midiPort;
+        ofParameter<vector<int>> midiChannel;
+        ofParameter<vector<float>> noteGroup;
+        ofParameter<vector<float>> gateGroup;
+        ofParameter<bool> noteTrig;
+        ofParameter<bool> panicTrigger;
+
+        ofEventListeners listeners;
+
+        ofxMidiOut midiOut;
+        vector<float> noteGroupStore;
+        vector<float> gateGroupStore;
+        vector<int> channelsStore;
     std::map<int, int> activeNotes;
 
-    void sendAllNoteOff() {
-        for (int channel = 1; channel <= 16; ++channel) {
-            for (int note = 0; note <= 127; ++note) {
-                midiOut.sendNoteOff(channel, note, 0);  // Sending note off for every note on every channel
+        void sendAllNoteOff() {
+            for (int channel = 1; channel <= 16; ++channel) {
+                for (int note = 0; note <= 127; ++note) {
+                    midiOut.sendNoteOff(channel, note, 0);
+                }
             }
         }
-    }
-};
+    };
+
+
 
 
 
