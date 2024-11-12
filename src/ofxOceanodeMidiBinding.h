@@ -96,7 +96,7 @@ public:
     
     string getPortName(){return portName;};
     
-    virtual ofxMidiMessage& sendMidiMessage(){ofxMidiMessage m; return m;};
+//    virtual ofxMidiMessage& sendMidiMessage() = 0;//{ofxMidiMessage m; return m;};
     virtual void bindParameter(){};
     
     ofEvent<string> unregisterUnusedMidiIns;
