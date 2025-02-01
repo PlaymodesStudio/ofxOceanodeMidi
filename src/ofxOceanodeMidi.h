@@ -10,6 +10,7 @@
 
 #include "midiOut.h"
 #include "midiGateIn.h"
+#include "midiControllerIn.h"
 #include "midiHelpers.h"
 
 namespace ofxOceanodeMidi{
@@ -20,6 +21,7 @@ static void registerModels(ofxOceanode &o){
     o.registerModel<programChange>("MIDI");
     o.registerModel<noteGate>("MIDI");
     o.registerModel<midiGateIn>("MIDI");
+    o.registerModel<controllerIn>("MIDI");
     o.registerModel<vectorHold>("Helpers");
 }
 static void registerType(ofxOceanode &o){
