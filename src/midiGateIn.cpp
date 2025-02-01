@@ -26,7 +26,7 @@ void midiGateIn::setup(){
     addParameter(noteslabel, ofxOceanodeParameterFlags_DisableSavePreset);
     addParameter(noteOnStart.set("Start", 0, 0, 127));
     addParameter(noteOnEnd.set("End", 127, 0, 127));
-    addParameter(output.set("Output", {0}, {0}, {1}));
+    addOutputParameter(output.set("Output", {0}, {0}, {1}));
     
     outputStore.resize(noteOnEnd - noteOnStart + 1, 0);
     listeners.push(noteOnStart.newListener(this, &midiGateIn::noteRangeChanged));
