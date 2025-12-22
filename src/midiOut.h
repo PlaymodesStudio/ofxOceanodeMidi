@@ -287,6 +287,126 @@ private:
     ofxMidiOut midiOut;
 };
 
+class midiClockOut : public ofxOceanodeNodeModel {
+public:
+	midiClockOut() : ofxOceanodeNodeModel("MIDI Clock Out") {}
+
+	void setup() override {
+
+		// ---- MIDI ----
+		addParameterDropdown(midiPort, "Port", 0, midiOut.getOutPortList());
+		addParameter(enable.set("Enable", false));
+
+		// ---- Inputs ----
+		addParameter(ppq24.set("PPQ 24", 0, 0, INT_MAX));
+		addParameter(play.set("Play", true));
+		addParameter(reset.set("Reset"));
+
+		// ---- Listeners ----
+		listeners.push(midiPort.newListener([this](int &device){
+			restartMidi(device);
+		}));
+
+		listeners.push(enable.newListener([this](bool &e){
+			e ? startMidi() : stopMidi();
+		}));
+
+		listeners.push(ppq24.newListener([this](int &v){
+			handlePpq(v);
+		}));
+
+		listeners.push(reset.newListener([this](){
+			sendStart();
+			lastPpq = 0;
+		}));
+	}
+
+private:
+
+	// ---------- MIDI management ----------
+
+	void startMidi() {
+		if(midiOut.isOpen()) return;
+		midiOut.openPort(midiPort);
+	}
+
+	void stopMidi() {
+		if(midiOut.isOpen()) midiOut.closePort();
+	}
+
+	void restartMidi(int device) {
+		stopMidi();
+		if(enable) startMidi();
+	}
+
+	// ---------- Core logic ----------
+
+	void handlePpq(int ppq) {
+		if(!enable || !midiOut.isOpen()) return;
+
+		// Detect scrub / jump
+		if(ppq != lastPpq + 1) {
+			sendSPP(ppq);
+			if(play) sendContinue();
+		}
+		// Normal playback
+		else if(play) {
+			sendClock();
+		}
+
+		lastPpq = ppq;
+	}
+
+	// ---------- MIDI send helpers ----------
+
+	void sendClock() {
+		midiOut.sendMidiByte(0xF8); // MIDI Clock
+	}
+
+	void sendStart() {
+		midiOut.sendMidiByte(0xFA); // Start
+	}
+
+	void sendStop() {
+		midiOut.sendMidiByte(0xFC); // Stop
+	}
+
+	void sendContinue() {
+		midiOut.sendMidiByte(0xFB); // Continue
+	}
+
+	void sendSPP(int ppq) {
+		// SPP units = MIDI beats = PPQ24 / 6
+		int spp = ppq / 6;
+
+		unsigned char lsb = spp & 0x7F;
+		unsigned char msb = (spp >> 7) & 0x7F;
+
+		std::vector<unsigned char> msg;
+		msg.push_back(0xF2); // Song Position Pointer
+		msg.push_back(lsb);
+		msg.push_back(msb);
+
+		midiOut.sendMidiBytes(msg);
+	}
+
+	// ---------- Parameters ----------
+
+	ofParameter<int>  midiPort;
+	ofParameter<bool> enable;
+
+	ofParameter<int>  ppq24;
+	ofParameter<bool> play;
+	ofParameter<void> reset;
+
+	// ---------- State ----------
+
+	int lastPpq = -1;
+
+	ofEventListeners listeners;
+	ofxMidiOut midiOut;
+};
+
 
 
 

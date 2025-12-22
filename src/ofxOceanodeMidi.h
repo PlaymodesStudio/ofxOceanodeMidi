@@ -22,6 +22,7 @@ static void registerModels(ofxOceanode &o){
     o.registerModel<noteGate>("MIDI");
     o.registerModel<midiGateIn>("MIDI");
     o.registerModel<controllerIn>("MIDI");
+	o.registerModel<midiClockOut>("MIDI");
     o.registerModel<vectorHold>("Helpers");
 }
 static void registerType(ofxOceanode &o){
