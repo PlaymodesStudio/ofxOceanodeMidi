@@ -10,6 +10,7 @@
 
 #include "midiOut.h"
 #include "midiGateIn.h"
+#include "midiGateInFast.h"
 #include "midiControllerIn.h"
 #include "midiHelpers.h"
 
@@ -21,6 +22,7 @@ static void registerModels(ofxOceanode &o){
     o.registerModel<programChange>("MIDI");
     o.registerModel<noteGate>("MIDI");
     o.registerModel<midiGateIn>("MIDI");
+	o.registerModel<midiGateInFast>("MIDI");
     o.registerModel<controllerIn>("MIDI");
 	o.registerModel<midiClockOut>("MIDI");
     o.registerModel<vectorHold>("Helpers");
