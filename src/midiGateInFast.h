@@ -11,6 +11,7 @@
 #include "ofxOceanodeNodeModel.h"
 #include "ofxMidi.h"
 #include <mutex>
+#include <map>
 
 class midiGateInFast : public ofxOceanodeNodeModel, ofxMidiListener {
 public:
@@ -43,6 +44,8 @@ public:
 		addParameter(noteOnEnd.set("End", 127, 0, 127));
 		
 		addOutputParameter(output.set("Output", {0}, {0}, {1}));
+		addOutputParameter(pitch.set("Pitch", {0.0f}, {0.0f}, {127.0f}));
+		addOutputParameter(gate.set("Gate", {0.0f}, {0.0f}, {1.0f}));
 		
 		outputStore.resize(noteOnEnd - noteOnStart + 1, 0);
 		
@@ -62,8 +65,13 @@ public:
 			if(n < outputStore.size()) {
 				outputStore[n] = 0;
 			}
+			// Remove from active notes map
+			activeNotesMap.erase(n + noteOnStart);
 		}
 		toShutNotes.clear();
+		
+		// Update pitch/gate outputs from active notes
+		updatePitchGateOutputs();
 	}
 	
 	void presetSave(ofJson &json) override {
@@ -96,8 +104,13 @@ private:
 				
 				int index = eventArgs.pitch - noteOnStart;
 				if(index >= 0 && index < outputStore.size()) {
-					outputStore[index] = (float)eventArgs.velocity / 127.0f;
+					float velocity = (float)eventArgs.velocity / 127.0f;
+					outputStore[index] = velocity;
 					activatedNotes.push_back(index);
+					
+					// Add to active notes map
+					activeNotesMap[eventArgs.pitch] = velocity;
+					
 					shouldUpdateOutput = true;
 				}
 			}
@@ -117,6 +130,7 @@ private:
 					} else {
 						// Immediate shutdown
 						outputStore[index] = 0;
+						activeNotesMap.erase(eventArgs.pitch);
 						shouldUpdateOutput = true;
 					}
 				}
@@ -137,19 +151,47 @@ private:
 			// NOTE: This happens in the MIDI callback thread!
 			// Downstream nodes MUST be thread-safe or only do pure computation
 			output = currentOutput;
+			
+			// Update pitch/gate outputs
+			updatePitchGateOutputs();
 		}
+	}
+	
+	void updatePitchGateOutputs() {
+		// Already locked by caller
+		
+		vector<float> pitchOut;
+		vector<float> gateOut;
+		
+		// Build vectors from active notes map (sorted by pitch)
+		for(const auto& pair : activeNotesMap) {
+			pitchOut.push_back((float)pair.first);  // MIDI note number
+			gateOut.push_back(pair.second);         // Velocity (0-1)
+		}
+		
+		// If no active notes, output single zero
+		if(pitchOut.empty()) {
+			pitchOut.push_back(0.0f);
+			gateOut.push_back(0.0f);
+		}
+		
+		pitch = pitchOut;
+		gate = gateOut;
 	}
 	
 	void midiDeviceListener(int &device) {
 		std::lock_guard<std::mutex> lock(mutex);
 		
 		outputStore = vector<float>(noteOnEnd - noteOnStart + 1, 0);
+		activeNotesMap.clear();
 		
 		midiIn->closePort();
 		if(device > 0) {
 			midiIn->openPort(device - 1);
 			midiIn->addListener(this);
 		}
+		
+		updatePitchGateOutputs();
 	}
 	
 	void noteRangeChanged(int &note) {
@@ -160,6 +202,18 @@ private:
 		} else {
 			outputStore.resize(noteOnEnd - noteOnStart + 1, 0);
 		}
+		
+		// Clear active notes that are now out of range
+		auto it = activeNotesMap.begin();
+		while(it != activeNotesMap.end()) {
+			if(it->first < noteOnStart || it->first > noteOnEnd) {
+				it = activeNotesMap.erase(it);
+			} else {
+				++it;
+			}
+		}
+		
+		updatePitchGateOutputs();
 	}
 	
 	ofEventListeners listeners;
@@ -170,11 +224,14 @@ private:
 	ofParameter<int> noteOnEnd;
 	
 	ofParameter<vector<float>> output;
+	ofParameter<vector<float>> pitch;
+	ofParameter<vector<float>> gate;
 	
 	ofxMidiIn* midiIn;
 	vector<float> outputStore;
 	vector<int> activatedNotes;
 	vector<int> toShutNotes;
+	std::map<int, float> activeNotesMap;  // pitch -> velocity
 	std::mutex mutex;
 	vector<string> midiports;
 };
