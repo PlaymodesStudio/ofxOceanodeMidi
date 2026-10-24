@@ -8,6 +8,7 @@
 #include "ofxOceanodeMidiController.h"
 #include "ofxOceanodeContainer.h"
 #include "ofxOceanodeMidiBinding.h"
+#include "ofxOceanodeMidiKeyboardBinding.h"
 #include "ofxOceanodeNodeMacro.h"
 #include "imgui.h"
 
@@ -86,6 +87,16 @@ void ofxOceanodeMidiController::draw(){
 
 void ofxOceanodeMidiController::createGuiForBinding(shared_ptr<ofxOceanodeAbstractMidiBinding> binding){
     //TODO: Change Style
+    if(auto keyboard = std::dynamic_pointer_cast<ofxOceanodeMidiKeyboardBinding>(binding)){
+        if(ImGui::TreeNode(binding->getName().c_str())){
+            if(binding->getPortName().empty()) ImGui::TextUnformatted("Play a note to learn device and channel");
+            else ImGui::Text("%s / Channel %d", binding->getPortName().c_str(), binding->getChannel().get());
+            if(ImGui::Button("Release notes")) keyboard->release();
+            ImGui::TextDisabled("Unbind from the node title's right-click menu");
+            ImGui::TreePop();
+        }
+        return;
+    }
     if (ImGui::TreeNode(binding->getName().c_str())){
 //        enum MesageTypes { MIDI_CONTROL_CHANGE, MIDI_NOTE_ON, MESSAGE_TYPES_COUNT};
 //        const char* messageTypes_names[MESSAGE_TYPES_COUNT] = {"Control Change", "Note On"};
