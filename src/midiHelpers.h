@@ -17,9 +17,9 @@ public:
     void setup(){
         addParameter(input.set("Input", {0}, {0}, {1}));
         addParameter(keepNotes.set("Keep", false));
-        addParameter(holding.set("Hold", false));
-        addParameter(exitHold.set("Trig"));
-        addParameter(output.set("Output", {0}, {0}, {1}));
+        addOutputParameter(holding.set("Hold", false));
+        addOutputParameter(exitHold.set("Trig"));
+        addOutputParameter(output.set("Output", {0}, {0}, {1}));
         
         listeners.push(keepNotes.newListener([this](bool &b){
             outputStore = output;
