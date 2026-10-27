@@ -6,6 +6,7 @@
 #define midiOut_h
 
 #include "ofxOceanodeNodeModel.h"
+#include "ofxOceanodeGlobalPitch.h"
 #include "ofxMidi.h"
 
 // NoteOut class
@@ -136,8 +137,12 @@ private:
 class noteGate : public ofxOceanodeNodeModel {
 public:
 	noteGate() : ofxOceanodeNodeModel("Note Gate") {}
+	~noteGate() { ofxOceanodeGlobalPitch::unfollow(this); }
 
 	void setup() {
+		// Global Pitch: each note gets the scale and transpose at its note-on (held
+		// notes keep theirs); a MIDI note has no fraction, so Detune does not reach it
+		ofxOceanodeGlobalPitch::follow(this, true, {});
 		addParameterDropdown(midiPort, "Port", 0, midiOut.getOutPortList());
 		addParameter(midiChannel.set("Ch", {1}, {1}, {16}));
 		addParameter(noteGroup.set("Note", {0}, {-FLT_MAX}, {FLT_MAX}));
@@ -225,8 +230,9 @@ public:
 						midiOut.sendNoteOff(channelsStore[i], activeNotes[i], 0);
 					}
 
-					midiOut.sendNoteOn(channels[i], static_cast<int>(vf[i]), gate[i]*127);
-					activeNotes[i] = static_cast<int>(vf[i]);
+					const int note = static_cast<int>(ofClamp(ofxOceanodeGlobalPitch::apply(this, vf[i], (int)i, false), 0, 127));
+					midiOut.sendNoteOn(channels[i], note, gate[i]*127);
+					activeNotes[i] = note;
 				}
 			}
 		}
